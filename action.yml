@@ -1,0 +1,68 @@
+name: 'Hardening Audit'
+description: 'Audit HTTPS endpoints for web-hardening weaknesses and gate on severity'
+inputs:
+  url:
+    description: 'Space-separated HTTPS URL(s) to audit'
+    required: true
+  fail-on:
+    description: 'Minimum severity that fails the action: none, low, medium, high, or critical'
+    required: false
+    default: 'high'
+  timeout:
+    description: 'Per-request timeout in seconds'
+    required: false
+    default: '15'
+  tool-ref:
+    description: 'Git ref of the audit tool files to fetch'
+    required: false
+    default: 'main'
+outputs:
+  passed:
+    description: 'true when no finding at or above the fail-on severity exists'
+    value: ${{ steps.audit.outputs.passed }}
+  summary:
+    description: 'Finding summary by severity and URL count'
+    value: ${{ steps.audit.outputs.summary }}
+runs:
+  using: composite
+  steps:
+    - id: audit
+      name: Run hardening audit
+      shell: bash
+      env:
+        AUDIT_URLS: ${{ inputs.url }}
+        AUDIT_FAIL_ON: ${{ inputs.fail-on }}
+        AUDIT_TIMEOUT: ${{ inputs.timeout }}
+        AUDIT_TOOL_REF: ${{ inputs.tool-ref }}
+      run: |
+        set -euo pipefail
+        case "$AUDIT_FAIL_ON" in
+          none|low|medium|high|critical) ;;
+          *)
+            printf '%s\n' '::error::fail-on must be one of: none, low, medium, high, critical' >&2
+            exit 1
+            ;;
+        esac
+        if ! [[ "$AUDIT_TIMEOUT" =~ ^[0-9]+$ ]]; then
+          printf '%s\n' '::error::timeout must be a positive integer number of seconds' >&2
+          exit 1
+        fi
+        BASE="https://raw.githubusercontent.com/greg-holman/hardening-audit/${AUDIT_TOOL_REF}"
+        TOOL="$(mktemp)"
+        REPORT="$(mktemp)"
+        PARSER="$(mktemp)"
+        trap 'rm -f "$TOOL" "$REPORT" "$PARSER"' EXIT
+        curl -fsSL "$BASE/hardening_audit.py" -o "$TOOL"
+        curl -fsSL "$BASE/audit_parser.py" -o "$PARSER"
+        set +e
+        python3 "$TOOL" --json --timeout "$AUDIT_TIMEOUT" $AUDIT_URLS > "$REPORT"
+        TOOL_RC=$?
+        set -e
+        if [ "$TOOL_RC" -ne 0 ] && [ ! -s "$REPORT" ]; then
+          printf '%s\n' '::error::audit tool failed before producing a report' >&2
+          exit 1
+        fi
+        # Under set -e: a non-zero parser exit (audit did not pass) fails the step
+        # with the parser's exit code; annotations and outputs were already
+        # emitted/written by the parser itself.
+        python3 "$PARSER" "$REPORT"

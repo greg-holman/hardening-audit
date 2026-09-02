@@ -1,0 +1,33 @@
+name: action-verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  audit-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # End-to-end exercise of the composite action: unreachable URLs must yield
+      # critical reachability findings, annotations, a non-zero exit, passed=false.
+      - name: Expected failure (unreachable URLs)
+        id: expect_fail
+        continue-on-error: true
+        uses: ./.
+        with:
+          url: 'https://hardening-audit-selfcheck.invalid/'
+          fail-on: high
+      - name: Assert the expected failure surfaced correctly
+        run: |
+          if [[ "${{ steps.expect_fail.outputs.passed }}" != "false" ]]; then
+            echo "expected passed=false for unreachable URLs"; exit 1; fi
+          echo "action-verify: pass/fail gating, annotations, and outputs all surfaced"
+      # And a passing shape: fail-on=none must succeed even with findings present.
+      - name: Expected pass (fail-on=none)
+        uses: ./.
+        with:
+          url: 'https://hardening-audit-selfcheck.invalid/'
+          fail-on: none

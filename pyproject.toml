@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hardening-audit"
+version = "0.1.0"
+description = "Audit HTTPS endpoints for web-hardening weaknesses. Pure-Python, stdlib-only."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [{name = "greg-holman"}]
+keywords = ["security", "audit", "hardening", "headers", "tls", "cli"]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+
+[project.scripts]
+hardening-audit = "hardening_audit:main"
+
+[tool.setuptools]
+py-modules = ["hardening_audit"]
